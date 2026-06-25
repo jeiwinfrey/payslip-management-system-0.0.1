@@ -101,9 +101,7 @@ function mapPayslipRow(row: {
     ...createEmptyPayslipInputs(),
     ...(row.payslipInput?.inputs ?? {}),
   }
-  const totals =
-    row.payslipInput?.totals ??
-    buildPayslipTotals(inputs, row.employee?.divisor)
+  const totals = buildPayslipTotals(inputs, row.employee?.divisor)
   const scheduleDays = resolveAttendanceScheduleDays(
     row.payroll,
     row.schedule?.days

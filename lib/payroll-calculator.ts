@@ -196,13 +196,49 @@ export function applyNonTaxableAttendanceAdjustments(
   return next
 }
 
+// Legacy imports may store peso line amounts in hour fields (e.g. regOt: 981.23).
+// Cutoff fields are cumulative across the DTR — ND/OT totals can exceed 48 hours
+// legitimately, so detect peso by comparing a hours-based line amount to basic pay.
+const MAX_PLAUSIBLE_CUTOFF_HOURS = CUTOFF_PERIOD_DAYS * HOURS_PER_DAY * 2
+
+function isPrecomputedPesoHourValue(
+  hours: number,
+  basicPay: number,
+  rateKey: PayrollRateKey,
+  divisor?: EmployeeDivisor | number
+): boolean {
+  if (hours <= 0) {
+    return false
+  }
+
+  if (hours > MAX_PLAUSIBLE_CUTOFF_HOURS) {
+    return true
+  }
+
+  if (basicPay <= 0) {
+    return false
+  }
+
+  const hourlyRate = getHourlyRate(basicPay, divisor)
+  const fromHours = hours * hourlyRate * PAYROLL_RATE_MULTIPLIERS[rateKey]
+  const maxPlausibleLineFromHours = basicPay * 3
+
+  return fromHours > maxPlausibleLineFromHours && hours > HOURS_PER_DAY
+}
+
 function computeHourLineAmount(
   hours: number,
   basicPay: number,
   rateKey: PayrollRateKey,
   divisor?: EmployeeDivisor | number
 ): number {
-  if (hours <= 0 || basicPay <= 0) {
+  if (hours <= 0) {
+    return 0
+  }
+  if (isPrecomputedPesoHourValue(hours, basicPay, rateKey, divisor)) {
+    return roundMoney(hours)
+  }
+  if (basicPay <= 0) {
     return 0
   }
   const hourlyRate = getHourlyRate(basicPay, divisor)
@@ -216,7 +252,13 @@ function computeHourLineAmountRaw(
   rateKey: PayrollRateKey,
   divisor?: EmployeeDivisor | number
 ): number {
-  if (hours <= 0 || basicPay <= 0) {
+  if (hours <= 0) {
+    return 0
+  }
+  if (isPrecomputedPesoHourValue(hours, basicPay, rateKey, divisor)) {
+    return hours
+  }
+  if (basicPay <= 0) {
     return 0
   }
   const hourlyRate = getHourlyRate(basicPay, divisor)
