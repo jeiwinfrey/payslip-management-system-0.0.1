@@ -209,6 +209,20 @@ function computeHourLineAmount(
   return roundMoney(hours * hourlyRate * PAYROLL_RATE_MULTIPLIERS[rateKey])
 }
 
+// ponytail: unrounded version for audit display
+function computeHourLineAmountRaw(
+  hours: number,
+  basicPay: number,
+  rateKey: PayrollRateKey,
+  divisor?: EmployeeDivisor | number
+): number {
+  if (hours <= 0 || basicPay <= 0) {
+    return 0
+  }
+  const hourlyRate = getHourlyRate(basicPay, divisor)
+  return hours * hourlyRate * PAYROLL_RATE_MULTIPLIERS[rateKey]
+}
+
 function sumFields(
   inputs: PayslipPayrollInputs,
   fields: { key: string }[]
@@ -221,6 +235,9 @@ function sumFields(
 
 export type PayslipCalculationResult = PayslipTotals & {
   lineAmounts: Record<string, number>
+  // ponytail: unrounded line amounts for audit display — same keys as lineAmounts
+  // but without the roundMoney() call on hours-based computations.
+  rawLineAmounts: Record<string, number>
 }
 
 export function calculatePayslipTotals(
@@ -273,8 +290,24 @@ export function calculatePayslipTotals(
   const grossPay = roundMoney(taxableEarnings + nonTaxableEarnings)
   const netPay = roundMoney(grossPay - totalDeductions)
 
+  // ponytail: build rawLineAmounts with unrounded hour-based computations
+  const rawLineAmounts: Record<string, number> = { ...lineAmounts }
+  for (const field of PAY_DETAILS_FIELDS) {
+    if (field.inputKind !== "hours" || !field.rateKey) {
+      continue
+    }
+    const hours = inputs[field.key as keyof PayslipPayrollInputs] ?? 0
+    rawLineAmounts[field.key] = computeHourLineAmountRaw(
+      typeof hours === "number" ? hours : 0,
+      basicPay,
+      field.rateKey,
+      divisor
+    )
+  }
+
   return {
     lineAmounts,
+    rawLineAmounts,
     taxableEarnings,
     totalDeductions,
     nonTaxableEarnings,

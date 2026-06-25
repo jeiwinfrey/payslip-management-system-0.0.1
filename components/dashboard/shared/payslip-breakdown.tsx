@@ -1,3 +1,7 @@
+"use client"
+
+import * as React from "react"
+
 import type { PayslipFieldDefinition } from "@/lib/payslip-fields"
 import {
   DEDUCTION_FIELDS,
@@ -33,6 +37,53 @@ function formatMoney(value: number, { signed = false } = {}) {
   }
 
   return `${value < 0 ? "-" : "+"}₱${formatted}`
+}
+
+// ponytail: full-precision format for auditing — shows all decimal places.
+function formatMoneyFull(value: number, { signed = false } = {}) {
+  const absValue = Math.abs(value)
+  const formatted = absValue.toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 20,
+  })
+
+  if (!signed || value === 0) {
+    return `₱${formatted}`
+  }
+
+  return `${value < 0 ? "-" : "+"}₱${formatted}`
+}
+
+// ponytail: click-to-reveal full precision for audit purposes.
+function ClickableAmount({
+  value,
+  rawValue,
+  signed,
+  className,
+}: {
+  value: number
+  rawValue?: number
+  signed: boolean
+  className?: string
+}) {
+  const [expanded, setExpanded] = React.useState(false)
+  const rounded = formatMoney(value, { signed })
+  const full = formatMoneyFull(rawValue ?? value, { signed })
+  const hasPrecision = rounded !== full
+
+  if (!hasPrecision) {
+    return <span className={className}>{rounded}</span>
+  }
+
+  return (
+    <span
+      className={cn(className, "cursor-pointer select-all underline decoration-dotted underline-offset-2")}
+      onClick={() => setExpanded((prev) => !prev)}
+      title={expanded ? "Click to collapse" : "Click to show full precision"}
+    >
+      {expanded ? full : rounded}
+    </span>
+  )
 }
 
 function formatQuantity(field: PayslipFieldDefinition, value: number): string {
@@ -84,12 +135,14 @@ function BreakdownValue({
   sectionKind,
   value,
   lineAmount,
+  rawLineAmount,
   displayMinutes,
 }: {
   field: PayslipFieldDefinition
   sectionKind: BreakdownSectionKind
   value: unknown
   lineAmount?: number
+  rawLineAmount?: number
   displayMinutes?: number | null
 }) {
   if (typeof value !== "number") {
@@ -101,6 +154,11 @@ function BreakdownValue({
     value,
     lineAmount,
   })
+
+  // ponytail: raw amount for click-to-reveal — uses unrounded computation
+  const rawAmount = rawLineAmount !== undefined
+    ? getDisplayAmount({ sectionKind, value, lineAmount: rawLineAmount })
+    : amount
 
   if (
     displayMinutes !== undefined ||
@@ -115,17 +173,23 @@ function BreakdownValue({
             : formatQuantity(field, value)}
         </span>
         <span className="text-muted-foreground">/</span>
-        <span className={cn("font-semibold", getAmountClassName(amount))}>
-          {formatMoney(amount, { signed: true })}
-        </span>
+        <ClickableAmount
+          value={amount}
+          rawValue={rawAmount}
+          signed
+          className={cn("font-semibold", getAmountClassName(amount))}
+        />
       </span>
     )
   }
 
   return (
-    <span className={cn("font-semibold", getAmountClassName(amount))}>
-      {formatMoney(amount, { signed: true })}
-    </span>
+    <ClickableAmount
+      value={amount}
+      rawValue={rawAmount}
+      signed
+      className={cn("font-semibold", getAmountClassName(amount))}
+    />
   )
 }
 
@@ -134,6 +198,7 @@ function BreakdownSection({
   fields,
   inputs,
   lineAmounts,
+  rawLineAmounts,
   attendance,
   sectionKind,
   variant,
@@ -142,6 +207,7 @@ function BreakdownSection({
   fields: PayslipFieldDefinition[]
   inputs: PayslipPayrollInputs
   lineAmounts?: Record<string, number>
+  rawLineAmounts?: Record<string, number>
   attendance?: PayslipAttendanceDisplay
   sectionKind: BreakdownSectionKind
   variant: "default" | "dashboard"
@@ -175,6 +241,7 @@ function BreakdownSection({
                   sectionKind={sectionKind}
                   value={value}
                   lineAmount={lineAmounts?.[field.key]}
+                  rawLineAmount={rawLineAmounts?.[field.key]}
                   displayMinutes={displayMinutes}
                 />
               </dd>
@@ -201,6 +268,7 @@ export function PayslipBreakdown({
         fields={PAY_DETAILS_FIELDS}
         inputs={inputs}
         lineAmounts={calculation.lineAmounts}
+        rawLineAmounts={calculation.rawLineAmounts}
         attendance={attendance}
         sectionKind="pay"
         variant={variant}

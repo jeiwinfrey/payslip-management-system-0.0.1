@@ -23,6 +23,14 @@ const COLUMNS_CLASS: Record<2 | 3 | 4, string> = {
   4: "grid gap-4 sm:grid-cols-2 lg:grid-cols-4",
 }
 
+// ponytail: unit suffix shown in form labels so admins know what to enter.
+// Skip suffix when the label already contains a unit hint (e.g. "Absences (Days)").
+function unitSuffix(field: PayslipFieldDefinition): string {
+  if (field.inputKind === "peso") return ""
+  if (/\(.*\)/.test(field.label)) return ""
+  return field.inputKind === "hours" ? " (hrs)" : " (days)"
+}
+
 export function PayslipFormSection({
   title,
   fields,
@@ -51,7 +59,7 @@ export function PayslipFormSection({
 
           return (
             <Field key={field.key}>
-              <FieldLabel htmlFor={field.key}>{field.label}</FieldLabel>
+              <FieldLabel htmlFor={field.key}>{field.label}{unitSuffix(field)}</FieldLabel>
               <DecimalInput
                 id={field.key}
                 name={field.key}

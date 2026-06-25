@@ -371,8 +371,9 @@ function drawMainGrid({
           width: cols.daysW - 4,
           align: "right",
         })
+        const hrsMinutes = attendanceMinutes ?? Math.round(val * 60)
         doc.text(
-          formatAttendanceDuration(attendanceMinutes ?? 0),
+          formatAttendanceDuration(hrsMinutes),
           cols.hrs,
           textY,
           {
