@@ -1,4 +1,7 @@
-import "dotenv/config"
+import { config } from "dotenv"
+
+config()
+config({ path: ".env.local", override: true })
 
 import bcrypt from "bcryptjs"
 import { eq } from "drizzle-orm"
