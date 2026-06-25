@@ -1,6 +1,6 @@
 import fs from "fs"
 import path from "path"
-import PDFDocument from "pdfkit/js/pdfkit.standalone.js"
+import PDFDocument from "pdfkit"
 
 import {
   DEDUCTION_FIELDS,
@@ -10,8 +10,8 @@ import {
   PAY_DETAILS_FIELDS,
   type PayslipFieldDefinition,
 } from "@/lib/payslip-fields"
-import { calculatePayslipTotals, formatAttendanceDuration } from "@/lib/payroll-calculator"
-import { formatDisplayDate } from "@/lib/payroll-dates"
+import { calculatePayslipTotals } from "@/lib/payroll-calculator"
+import { formatDisplayDate, formatLongDisplayDate } from "@/lib/payroll-dates"
 import type { PayslipPayrollInputs, PayslipPdfData } from "@/lib/types"
 
 const PAGE_MARGIN = 36
@@ -22,6 +22,7 @@ const BLOCK_GAP = 0
 const LOGO_HEIGHT = 52
 
 const DARK_GREEN = "#166534"
+const PDF_NEGATIVE_COLOR = "#FF0000"
 
 const GRID_ROW_COUNT =
   1 + PAY_DETAILS_FIELDS.length + 1.5 + NON_TAXABLE_PDF_FIELDS.length + 1.5 + 1
@@ -58,6 +59,33 @@ function formatSampleQty(value: number | undefined) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   })
+}
+
+function formatPdfHoursCell(options: {
+  hours?: number
+  minutes?: number
+}): string {
+  const totalHours =
+    options.minutes !== undefined
+      ? options.minutes / 60
+      : (options.hours ?? 0)
+
+  if (totalHours === 0) {
+    return "-"
+  }
+
+  return totalHours.toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function formatPdfAmount(value: number | undefined) {
+  return formatSampleAmount(value)
+}
+
+function applyPdfAmountColor(doc: PDFKit.PDFDocument, value: number) {
+  doc.fillColor(value < 0 ? PDF_NEGATIVE_COLOR : "#000000")
 }
 
 function formatSampleDtr(start: string, end: string) {
@@ -371,16 +399,14 @@ function drawMainGrid({
           width: cols.daysW - 4,
           align: "right",
         })
-        const hrsMinutes = attendanceMinutes ?? Math.round(val * 60)
-        doc.text(
-          formatAttendanceDuration(hrsMinutes),
-          cols.hrs,
-          textY,
-          {
-            width: cols.hrsW - 4,
-            align: "right",
-          }
-        )
+        const hrsText =
+          attendanceMinutes !== undefined
+            ? formatPdfHoursCell({ minutes: attendanceMinutes })
+            : formatPdfHoursCell({ hours: val })
+        doc.text(hrsText, cols.hrs, textY, {
+          width: cols.hrsW - 4,
+          align: "right",
+        })
       } else {
         doc.text("-", cols.days, textY, {
           width: cols.daysW - 4,
@@ -388,8 +414,8 @@ function drawMainGrid({
         })
         doc.text("-", cols.hrs, textY, { width: cols.hrsW - 4, align: "right" })
       }
-      doc.fillColor(amount < 0 ? "#FF0000" : "#000000")
-      doc.text(formatSampleAmount(amount), cols.amount, textY, {
+      applyPdfAmountColor(doc, amount)
+      doc.text(formatPdfAmount(amount), cols.amount, textY, {
         width: cols.amountW - 4,
         align: "right",
       })
@@ -402,15 +428,20 @@ function drawMainGrid({
         lineBreak: false,
         ellipsis: true,
       })
-      doc.font("Helvetica").fontSize(8).fillColor("#000000")
-      doc.text(
-        typeof dedVal === "number" && dedVal !== 0
-          ? formatSampleAmount(dedVal)
-          : "-",
-        cols.dedAmount,
-        textY,
-        { width: cols.dedAmountW - 4, align: "right" }
-      )
+      doc.font("Helvetica").fontSize(8)
+      if (typeof dedVal === "number" && dedVal !== 0) {
+        applyPdfAmountColor(doc, dedVal)
+        doc.text(formatPdfAmount(dedVal), cols.dedAmount, textY, {
+          width: cols.dedAmountW - 4,
+          align: "right",
+        })
+      } else {
+        doc.fillColor("#000000")
+        doc.text("-", cols.dedAmount, textY, {
+          width: cols.dedAmountW - 4,
+          align: "right",
+        })
+      }
     }
 
     rowY += rowHeight
@@ -559,7 +590,7 @@ function drawSampleFooter(
   doc.font("Helvetica-Bold").fontSize(8).fillColor("#000000")
   doc.text(" Payout Date:", PAGE_MARGIN, y + 15, { width: 70 })
   doc.font("Helvetica-Oblique").fontSize(8).fillColor("#000000")
-  doc.text(formatDisplayDate(data.payoutDate), PAGE_MARGIN + 65, y + 15)
+  doc.text(formatLongDisplayDate(data.payoutDate), PAGE_MARGIN + 65, y + 15)
 
   doc.font("Helvetica-Bold").fontSize(7).fillColor(DARK_GREEN)
   doc.text("HELPORT PHILIPPINES BRANCH OFFICE", PAGE_WIDTH / 2 + 30, y + 25)
